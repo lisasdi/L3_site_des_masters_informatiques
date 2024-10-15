@@ -1,5 +1,19 @@
-# site_web_master_informatique
-site web dédié à la représentation des programmes de
-master en informatique
-Bonjour,
-Ma demande de titre de séjour est en cours de traitement depuis le 05/09/2024,je tiens à vous informer que mon ancien titre de séjour est valable jusqu’au 14/11/2024. D’ici là si je ne reçois pas un avis favorable sur ma demande de renouvellement, la préfecture me transmettra une attestation de prolongation de mon ancien titre de séjour 
+import configparser
+
+# Créer un objet configparser
+config = configparser.ConfigParser()
+
+# Lire le fichier de configuration
+config.read('config.ini')
+
+# Accéder aux chemins dans la section 'paths'
+input_file = config['paths']['input_file']
+output_file = config['paths']['output_file']
+
+# Utilisation dans le code
+print(f"Le fichier d'entrée se trouve à : {input_file}")
+print(f"Le fichier de sortie se trouve à : {output_file}")
+
+[paths]
+input_file = /chemin/vers/ton/fichier/input.csv
+output_file = /chemin/vers/ton/fichier/output.csv
