@@ -1,136 +1,61 @@
-from fastapi import Depends, FastAPI, HTTPException, Query
-import pickle
-from modelsApi import Text, Base
-from schema import TextSchema
-from database import engine, SessionLocal
-from sqlalchemy.orm import Session
-from preprocessing import read, plot_cm, process
-import uvicorn
-import configparser
-from sqlmodel import Field, Session, SQLModel, create_engine, select
-from typing import Annotated
-import logging
 
-# Configuration du logging
-logging.basicConfig(
-    filename='example.log',
-    encoding='utf-8',
-    format="%(name)s: %(asctime)s | %(levelname)s | %(filename)s:%(lineno)s | %(process)d >>> %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%SZ",
-    level=logging.DEBUG
+# http://127.0.0.1:8050/ 
+
+import dash
+from dash import Dash, html, dcc,Input, Output
+import plotly.express as px
+import pandas as pd
+import sqlite3
+app = Dash(__name__,requests_pathname_prefix='/dashboard1/')
+
+
+
+app.layout = html.Div([
+    html.H1('Analysis '),
+    html.Div([
+    html.H3('Spam &ham selon score prediction et taille des messages '),
+    dcc.Graph(id="graphpie"),
+    html.P("Names:"),
+    dcc.Dropdown(id='names',
+        options=['type_msg'],
+        value='type_msg', clearable=False
+    ),
+    html.P("Values:"),
+    dcc.Dropdown(id='values',
+        options=['score_conf', 'len_msg'],
+        value='score_conf', clearable=False
+    ),]),
+    html.Div([
+    html.H3('Nombre total de requetes et nombre de spam reçu '),
+    dcc.Graph(id="graph")])
+])
+
+
+@app.callback(
+    Output("graphpie", "figure"),
+    Input("names", "value"), 
+    Input("values", "value"))
+def generate_chart(names, values):
+    # Create your connection.
+    cnx = sqlite3.connect('usersTest.db')
+
+    df = pd.read_sql_query("SELECT * FROM Result_prediction ", cnx)
+    fig = px.pie(df, values=values, names=names, hole=.3)
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    return fig
+@app.callback(
+    Output("graph", "figure"),
+    Input("names", "value")   
 )
+def update_bar_chart(names):
+    cnx = sqlite3.connect('usersTest.db')
+    df = pd.read_sql_query("SELECT * FROM Result_prediction ", cnx)
+    total_rows=len(df)
+    nb_spam=df[df["type_msg"]=='spam'].shape[0]
+    count=[total_rows,nb_spam]
+    label=["Total","spam"]
+    fig = px.bar(x=label,y=count,color=['Total','spam'],text_auto='.2s')
+    return fig
 
-logging.info("API FastAPI - Initialisation en cours")
-
-# Création des tables de la base de données
-Base.metadata.create_all(bind=engine)
-
-app = FastAPI()
-
-def get_db():
-    try:
-        db = SessionLocal()
-        yield db
-    finally:
-        db.close()
-
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-@app.get('/')
-def index():
-    logging.info("Endpoint / appelé")
-    return {'message': 'text Detection ML API'}
-
-output_api_predict = config['paths']['output_api_predict']
-
-@app.post(output_api_predict)
-async def predict_text_type(request: TextSchema, db: Session = Depends(get_db), input_file_model=config['paths']['input_file_model']):
-    logging.info("Début de la prédiction pour le texte reçu")
-    
-    # Chargement du modèle
-    try:
-        with open(input_file_model, "rb") as f:
-            model = pickle.load(f)
-        logging.info("Modèle chargé avec succès")
-    except Exception as e:
-        logging.error(f"Erreur lors du chargement du modèle: {e}")
-        raise HTTPException(status_code=500, detail="Erreur de chargement du modèle")
-
-    # Nettoyage des données
-    try:
-        textin = request.text
-        test_x = process(textin)
-        logging.debug(f"Texte nettoyé: {test_x}")
-    except Exception as e:
-        logging.error(f"Erreur lors du traitement du texte: {e}")
-        raise HTTPException(status_code=500, detail="Erreur de traitement du texte")
-
-    # Prédiction
-    try:
-        test_x_list = [test_x]
-        prediction = model.predict_proba(test_x_list)[:, 1]
-        logging.info(f"Prédiction effectuée: {prediction}")
-    except Exception as e:
-        logging.error(f"Erreur lors de la prédiction: {e}")
-        raise HTTPException(status_code=500, detail="Erreur de prédiction")
-
-    # Déterminer si le texte est un spam ou non
-    is_spam = prediction[0] >= 0.5
-    valeur_out = 'spam' if is_spam else 'ham'
-    logging.info(f"Type de message prédit: {valeur_out}")
-
-    # Ajouter le résultat à la base de données
-    try:
-        textresult = Text(text=textin, texte_clean=test_x, score_conf=round(prediction[0], 2), type_msg=valeur_out)
-        db.add(textresult)
-        db.commit()
-        db.refresh(textresult)
-        logging.info(f"Résultat ajouté à la base de données avec succès : {textresult}")
-    except Exception as e:
-        logging.error(f"Erreur lors de l'ajout du résultat à la base de données: {e}")
-        raise HTTPException(status_code=500, detail="Erreur d'ajout à la base de données")
-
-    return textresult
-
-@app.get(output_api_predict)
-def get_output_api_predict(db: Session = Depends(get_db)):
-    logging.info("Récupération des prédictions")
-    try:
-        bdd = db.query(Text)
-        return bdd.all()
-    except Exception as e:
-        logging.error(f"Erreur lors de la récupération des prédictions: {e}")
-        raise HTTPException(status_code=500, detail="Erreur de récupération des données")
-
-output_api_readtype = config['paths']['output_api_readtype']
-
-@app.get(output_api_readtype)
-def get_specific_type_predict(typepred: str, db: Session = Depends(get_db)):
-    logging.info(f"Recherche des messages de type : {typepred}")
-    if typepred in ['spam', 'ham']:
-        try:
-            bdd = db.query(Text).filter(Text.type_msg == typepred)
-            return bdd.all()
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération des messages de type {typepred}: {e}")
-            raise HTTPException(status_code=500, detail="Erreur de récupération des données")
-    
-    logging.warning(f"Type de message non trouvé : {typepred}")
-    raise HTTPException(status_code=404, detail="Aucun type ne répond aux critères de recherche")
-
-output_api_nbspam = config['paths']['output_api_nbspam']
-
-@app.get(output_api_nbspam)
-def get_nbspam(db: Session = Depends(get_db)):
-    logging.info("Récupération du nombre de spams")
-    try:
-        bdd = db.query(Text).filter(Text.type_msg == "spam")
-        return {"nb_spam": bdd.count()}
-    except Exception as e:
-        logging.error(f"Erreur lors du comptage des spams: {e}")
-        raise HTTPException(status_code=500, detail="Erreur de récupération des données")
-
-if __name__ == "__main__":
-    logging.info("Lancement du serveur FastAPI")
-    uvicorn.run("api:app", host='127.0.0.1', port=8000, reload=True)
+if __name__ == '__main__':
+    app.run(debug=True)
