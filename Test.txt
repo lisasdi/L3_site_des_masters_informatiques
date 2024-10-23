@@ -1,61 +1,38 @@
-import imaplib
-import email
-from email.header import decode_header
+from O365 import Account
 import joblib
 from sklearn.feature_extraction.text import CountVectorizer
 
-# Connexion au serveur IMAP d'Outlook
-imap = imaplib.IMAP4_SSL("outlook.office365.com")
-username = "your-email@outlook.com"
-password = "your_password"
-imap.login(username, password)
-
-# Sélectionner la boîte de réception
-imap.select("inbox")
-
-# Rechercher tous les e-mails
-status, messages = imap.search(None, "ALL")
-
-# Convertir les résultats en une liste d'IDs d'emails
-messages = messages[0].split()
-
-# Charger le modèle de détection de spams
+# Charger ton modèle de détection de spams
 model = joblib.load('model1.pkl')
-vectorizer = CountVectorizer()  # Le vectorizer doit être le même que celui utilisé pour entraîner le modèle
+vectorizer = CountVectorizer()
 
-# Fonction pour détecter le spam
+# Authentification avec Microsoft 365 (Outlook)
+credentials = ('client_id', 'client_secret')
+account = Account(credentials)
+
+# Authentification interactive (OAuth)
+if not account.is_authenticated:
+    # Authentification initiale
+    account.authenticate(scopes=['basic', 'message_all'])
+
+# Récupérer les e-mails
+mailbox = account.mailbox()
+inbox = mailbox.inbox_folder()
+messages = inbox.get_messages(limit=10)
+
+# Fonction de détection de spam
 def detect_spam(email_body):
     email_vector = vectorizer.transform([email_body])
     prediction = model.predict(email_vector)
     return prediction[0]  # 1 pour spam, 0 pour non-spam
 
-# Traiter les e-mails
-for msg_id in messages[-10:]:  # Traiter les 10 derniers e-mails par exemple
-    # Récupérer l'e-mail par son ID
-    res, msg = imap.fetch(msg_id, "(RFC822)")
-    for response_part in msg:
-        if isinstance(response_part, tuple):
-            # Analyser l'e-mail
-            msg = email.message_from_bytes(response_part[1])
-            subject = decode_header(msg["Subject"])[0][0]
-            if isinstance(subject, bytes):
-                subject = subject.decode()
+# Analyser les e-mails
+for message in messages:
+    subject = message.subject
+    body = message.body
+    is_spam = detect_spam(body)
 
-            # Obtenir le corps de l'e-mail
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body = part.get_payload(decode=True).decode()
-                        break
-            else:
-                body = msg.get_payload(decode=True).decode()
-
-            # Appliquer le modèle de détection de spams
-            is_spam = detect_spam(body)
-            if is_spam:
-                print(f"Spam detected: {subject}")
-            else:
-                print(f"Not a spam: {subject}")
-
-# Fermer la connexion IMAP
-imap.logout()
+    if is_spam:
+        print(f"Spam detected: {subject}")
+    else:
+        print(f"Not a spam: {subject}")
