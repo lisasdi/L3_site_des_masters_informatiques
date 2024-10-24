@@ -1,52 +1,27 @@
-class Graph:
-    def __init__(self, vertices):
-        self.V = vertices
-        self.graph = []
+INF = 9999999
+V = 5
+# Adjacency matrix for the graph
+G = [[0, 9, 75, 0, 0],
+     [9, 0, 95, 19, 42],
+     [75, 95, 0, 51, 66],
+     [0, 19, 51, 0, 31],
+     [0, 42, 66, 31, 0]]
 
-    def add_edge(self, u, v, w):
-        self.graph.append([u, v, w])
+selected = [False] * V  # Track selected vertices
+selected[0] = True  # Start with the first vertex
+no_edge = 0
 
-    # Fonction pour trouver le parent d'un noeud (représentant d'un sous-ensemble)
-    def find(self, parent, i):
-        if parent[i] == i:
-            return i
-        return self.find(parent, parent[i])
-
-    # Fonction pour faire l'union de deux ensembles
-    def union(self, parent, rank, x, y):
-        xroot = self.find(parent, x)
-        yroot = self.find(parent, y)
-        if rank[xroot] < rank[yroot]:
-            parent[xroot] = yroot
-        elif rank[xroot] > rank[yroot]:
-            parent[yroot] = xroot
-        else:
-            parent[yroot] = xroot
-            rank[xroot] += 1
-
-    # Algorithme de Kruskal simplifié
-    def kruskal_algo(self):
-        result = []
-        self.graph.sort(key=lambda x: x[2])  # Trier les arêtes par poids croissant
-        parent = list(range(self.V))         # Initialiser le parent de chaque noeud à lui-même
-        rank = [0] * self.V                 # Initialiser les rangs à 0
-
-        for u, v, w in self.graph:
-            x = self.find(parent, u)
-            y = self.find(parent, v)
-            if x != y:  # Si ajouter cette arête ne forme pas de cycle
-                result.append([u, v, w])
-                self.union(parent, rank, x, y)
-
-        return result
-
-g = Graph(6)
-edges = [(0, 1, 4), (0, 2, 4), (1, 2, 2), (2, 3, 3), (2, 5, 2), (2, 4, 4), (3, 4, 3), (5, 4, 3)]
-for edge in edges:
-    g.add_edge(*edge)
-
-# Obtenir le résultat de l'algorithme de Kruskal
-result = g.kruskal_algo()
-print("Les arêtes de l'arbre couvrant minimal sont :")
-for u, v, weight in result:
-    print(f"{u} - {v}: {weight}")
+print("Edge : Weight")
+while no_edge < V - 1:
+    minimum = INF
+    x = y = 0
+    for i in range(V):
+        if selected[i]:
+            for j in range(V):
+                if not selected[j] and G[i][j]:  # Check adjacent vertices
+                    if G[i][j] < minimum:
+                        minimum = G[i][j]
+                        x, y = i, j
+    print(f"{x}-{y}: {G[x][y]}")
+    selected[y] = True
+    no_edge += 1
