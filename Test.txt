@@ -1,38 +1,52 @@
-from O365 import Account
-import joblib
-from sklearn.feature_extraction.text import CountVectorizer
+class Graph:
+    def __init__(self, vertices):
+        self.V = vertices
+        self.graph = []
 
-# Charger ton modèle de détection de spams
-model = joblib.load('model1.pkl')
-vectorizer = CountVectorizer()
+    def add_edge(self, u, v, w):
+        self.graph.append([u, v, w])
 
-# Authentification avec Microsoft 365 (Outlook)
-credentials = ('client_id', 'client_secret')
-account = Account(credentials)
+    # Fonction pour trouver le parent d'un noeud (représentant d'un sous-ensemble)
+    def find(self, parent, i):
+        if parent[i] == i:
+            return i
+        return self.find(parent, parent[i])
 
-# Authentification interactive (OAuth)
-if not account.is_authenticated:
-    # Authentification initiale
-    account.authenticate(scopes=['basic', 'message_all'])
+    # Fonction pour faire l'union de deux ensembles
+    def union(self, parent, rank, x, y):
+        xroot = self.find(parent, x)
+        yroot = self.find(parent, y)
+        if rank[xroot] < rank[yroot]:
+            parent[xroot] = yroot
+        elif rank[xroot] > rank[yroot]:
+            parent[yroot] = xroot
+        else:
+            parent[yroot] = xroot
+            rank[xroot] += 1
 
-# Récupérer les e-mails
-mailbox = account.mailbox()
-inbox = mailbox.inbox_folder()
-messages = inbox.get_messages(limit=10)
+    # Algorithme de Kruskal simplifié
+    def kruskal_algo(self):
+        result = []
+        self.graph.sort(key=lambda x: x[2])  # Trier les arêtes par poids croissant
+        parent = list(range(self.V))         # Initialiser le parent de chaque noeud à lui-même
+        rank = [0] * self.V                 # Initialiser les rangs à 0
 
-# Fonction de détection de spam
-def detect_spam(email_body):
-    email_vector = vectorizer.transform([email_body])
-    prediction = model.predict(email_vector)
-    return prediction[0]  # 1 pour spam, 0 pour non-spam
+        for u, v, w in self.graph:
+            x = self.find(parent, u)
+            y = self.find(parent, v)
+            if x != y:  # Si ajouter cette arête ne forme pas de cycle
+                result.append([u, v, w])
+                self.union(parent, rank, x, y)
 
-# Analyser les e-mails
-for message in messages:
-    subject = message.subject
-    body = message.body
-    is_spam = detect_spam(body)
+        return result
 
-    if is_spam:
-        print(f"Spam detected: {subject}")
-    else:
-        print(f"Not a spam: {subject}")
+g = Graph(6)
+edges = [(0, 1, 4), (0, 2, 4), (1, 2, 2), (2, 3, 3), (2, 5, 2), (2, 4, 4), (3, 4, 3), (5, 4, 3)]
+for edge in edges:
+    g.add_edge(*edge)
+
+# Obtenir le résultat de l'algorithme de Kruskal
+result = g.kruskal_algo()
+print("Les arêtes de l'arbre couvrant minimal sont :")
+for u, v, weight in result:
+    print(f"{u} - {v}: {weight}")
