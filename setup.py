@@ -1,115 +1,131 @@
-from preprocessing import plot_cm, reporting, read
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
-from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-import pickle
-import time
-import numpy as np
-import matplotlib.pyplot as plt
+import requests
 import pandas as pd
-import configparser
 
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-def cross_validation_modelfit(model_hyper, data, X, y, splits, df_results, pipeline_name):
-    kf = KFold(n_splits=splits, random_state=1, shuffle=True)
-    for fold, (train_index, test_index) in enumerate(kf.split(X), 1):
-        X_train, X_test = np.array(X)[train_index], np.array(X)[test_index]
-        y_train, y_test = y[train_index], y[test_index]
-        df_results = training_model(model_hyper, data, X_train, X_test, y_train, y_test, df_results, pipeline_name, fold)
-    return df_results
-
-def tf_idf_function(X_train, input_file_vectorisation=config['paths']['input_file_vectorisation']):
-    vect = CountVectorizer()
-    X_train_dtm = vect.fit_transform(X_train)
-    tfidf_transformer = TfidfTransformer()
-    tfidf_transformer.fit_transform(X_train_dtm)
-    with open(input_file_vectorisation, "wb") as f:
-        pickle.dump(vect, f)
-    return X_train_dtm
-
-def find_best_hyperparameters(model, params, X, y):
-    X_train, _, y_train, _ = train_test_split(X, y, random_state=1)
-    X_train_dtm = tf_idf_function(X_train)
-    grid_search = GridSearchCV(model, param_grid=params, cv=5)
-    grid_search.fit(X_train_dtm, y_train)
-    return grid_search
-
-def training_model(model_hyper, data, X_train, X_test, y_train, y_test, df_results, pipeline_name, fold=None):
-    model = make_pipeline(CountVectorizer(), TfidfTransformer(), model_hyper)
-    start = time.time()
-    model.fit(X_train, y_train)
-    elapsed_time = time.time() - start
-
-    predictions = model.predict(X_test)
-    plot_cm(y_test, predictions, data.label.unique(), f"{pipeline_name}_fold{fold}" if fold else pipeline_name)
-
-    train_score = model.score(X_train, y_train)
-    test_score = model.score(X_test, y_test)
-
-    algo_name = f"{model_hyper.__class__.__name__}_{pipeline_name}"
-    df_results = reporting({algo_name: predictions}, y_test, elapsed_time, train_score, test_score, df_results)
+def get_coordinates_from_nominatim(address):
+    """
+    Utilise l'API Nominatim d'OpenStreetMap pour obtenir les coordonnées géographiques à partir d'une adresse.
     
-    model_path = config['paths']['input_file_model_training'] + f"_{pipeline_name}.pkl"
-    with open(model_path, "wb") as f:
-        pickle.dump(model, f)
+    Arguments:
+    - address: L'adresse à géocoder.
     
-    return df_results
+    Retourne:
+    - Un dictionnaire contenant la latitude et la longitude.
+    """
+    url = 'https://nominatim.openstreetmap.org/search'
+    params = {
+        'q': address,
+        'format': 'json',
+        'addressdetails': 1,
+        'limit': 1
+    }
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data:
+            location = data[0]
+            return {'lat': location['lat'], 'lon': location['lon']}
+        else:
+            print("Adresse non trouvée")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Erreur: {e}")
+        return None
 
-def run_pipelines(data, df_results):
-    X1 = data.clean_msg_pipeline_1
-    X2 = data.clean_msg_pipeline_2
-    y = data.label_num
+# Exemple de base de données locale simulée pour les codes INSEE et IRIS
+insee_iris_db = {
+    ('48.8566', '2.3522'): {'c_insee': '75056', 'c_iris': '0101'}
+}
 
-    # Hyperparamètres pour LogisticRegression et RandomForestClassifier
-    param_grid_lr = {'C': [0.1, 1, 10, 100], 'penalty': ['l1', 'l2']}
-    param_grid_rf = {'n_estimators': [200, 500], 'max_features': ['auto', 'sqrt'], 'max_depth': [4, 6, 8], 'criterion': ['gini', 'entropy']}
-
-    # Tester les modèles sur les deux pipelines
-    for X, pipeline_name in zip([X1, X2], ["pipeline_1", "pipeline_2"]):
-        for model, params, model_name in [(LogisticRegression(), param_grid_lr, "RL"), (RandomForestClassifier(random_state=1), param_grid_rf, "RF")]:
-            best_model = find_best_hyperparameters(model, params, X, y).best_estimator_
-            print(f"Meilleur estimateur pour {model_name}_{pipeline_name} : ", best_model)
-            df_results = using_train_test_split(best_model, data, X, y, df_results, f"{model_name}_{pipeline_name}")
+def get_insee_iris_from_coordinates(lat, lon):
+    """
+    Mappe les coordonnées géographiques aux codes INSEE et IRIS.
     
-    return df_results
+    Arguments:
+    - lat: Latitude.
+    - lon: Longitude.
+    
+    Retourne:
+    - Un dictionnaire contenant les codes INSEE et IRIS.
+    """
+    # Simuler la recherche dans la base de données locale
+    key = (str(round(float(lat), 4)), str(round(float(lon), 4)))
+    return insee_iris_db.get(key, {'c_insee': 'UNKNOWN', 'c_iris': 'UNKNOWN'})
 
-def using_train_test_split(model_hyper, data, X, y, df_results, pipeline_name):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
-    df_results = training_model(model_hyper, data, X_train, X_test, y_train, y_test, df_results, pipeline_name)
-    return df_results
+def EG_Insee_Iris(table_entree, top_TNP, civilite=None, prenom=None, nom=None, complement_nom=None, adresse=None, complement_adrs=None, lieu_dit=None, cp=None, ville=None, id_client=None, pays=None, email=None, tel=None):
+    """
+    Fonction de géocodage pour récupérer les codes INSEE et IRIS à partir d'une adresse.
 
-# Préparer le dataframe de résultats
-df_results = pd.DataFrame(columns=["Algorithm", "Precision", "Recall", "F1-Score", "Accuracy", "time", "train score", "test score"])
+    Arguments:
+    - table_entree: Obligatoire, table de données, au format DataFrame.
+    - top_TNP: Obligatoire, 1 si les champs civilite, nom et prénom sont dans le même champ, 0 si les champs sont dans des champs distincts.
+    - civilite: Nom du champ contenant la civilité.
+    - prenom: Nom du champ contenant le prénom.
+    - nom: Nom du champ contenant le nom.
+    - complement_nom: Nom du champ contenant le complément du nom.
+    - adresse: Obligatoire, nom du champ contenant l’adresse.
+    - complement_adrs: Nom du champ contenant le complément d’adresse.
+    - lieu_dit: Nom du champ contenant le lieudit.
+    - cp: Obligatoire, nom du champ contenant le code postal.
+    - ville: Obligatoire, nom du champ contenant la ville.
+    - id_client: Obligatoire, nom du champ contenant l’identifiant client.
+    - pays: Nom du champ contenant le pays.
+    - email: Nom du champ contenant l’adresse email.
+    - tel: Nom du champ contenant le numéro de téléphone.
 
-# Charger les données
-input_file_data = config['paths']['input_file_data_csv']
-input_file_data_pkl = config['paths']['input_file_data_pkl']
-read(input_file_data)
-with open(input_file_data_pkl, "rb") as f:
-    datasms = pickle.load(f)
+    Retourne:
+    - Une table de données au format DataFrame contenant les champs initiaux ainsi que les champs supplémentaires: c_insee, c_iris, c_qualite_iris, codgeo.
+    """
+    # Ajouter les nouvelles colonnes avec des valeurs par défaut
+    table_entree['c_insee'] = 'UNKNOWN'
+    table_entree['c_iris'] = 'UNKNOWN'
+    table_entree['c_qualite_iris'] = 8  # 8 : non trouvé ou non disponible
+    table_entree['codgeo'] = 'UNKNOWN'
+    
+    for index, row in table_entree.iterrows():
+        full_address = f"{row[adresse]}, {row[cp]} {row[ville]}, {row.get(pays, 'France')}"
+        coordinates = get_coordinates_from_nominatim(full_address)
+        
+        if coordinates:
+            lat = coordinates['lat']
+            lon = coordinates['lon']
+            insee_iris_codes = get_insee_iris_from_coordinates(lat, lon)
+            
+            table_entree.at[index, 'c_insee'] = insee_iris_codes['c_insee']
+            table_entree.at[index, 'c_iris'] = insee_iris_codes['c_iris']
+            table_entree.at[index, 'c_qualite_iris'] = 1  # 1 : correspondance exacte
+            table_entree.at[index, 'codgeo'] = insee_iris_codes['c_insee'] + insee_iris_codes['c_iris']
+    
+    return table_entree
 
-# Évaluer les modèles sur les deux pipelines de données
-df_results = run_pipelines(datasms, df_results)
+# Exemple d'utilisation
+data = {
+    'civilite': ['M.', 'Mme'],
+    'prenom': ['Jean', 'Marie'],
+    'nom': ['Dupont', 'Durand'],
+    'adresse': ['123 Rue de Paris', '456 Avenue de la République'],
+    'cp': ['75001', '75002'],
+    'ville': ['Paris', 'Paris'],
+    'id_client': [1, 2],
+    'pays': ['France', 'France'],
+    'email': ['jean.dupont@example.com', 'marie.durand@example.com'],
+    'tel': ['0102030405', '0607080910']
+}
+table_entree = pd.DataFrame(data)
 
-# Affichage des résultats
-print(df_results)
+# Appel de la fonction de géocodage
+resultat_geocodage = EG_Insee_Iris(
+    table_entree=table_entree,
+    top_TNP=0,  # 0 signifie que civilite, nom et prénom sont dans des champs distincts
+    civilite='civilite',
+    prenom='prenom',
+    nom='nom',
+    adresse='adresse',
+    cp='cp',
+    ville='ville',
+    id_client='id_client'
+)
 
-# Statistiques
-moyenne = df_results['Accuracy'].mean()
-variance = df_results['Accuracy'].var()
-std = df_results['Accuracy'].std()
-print("Moyenne des scores : ", moyenne)
-print("Écart-type des scores : ", std)
-print("Variance des scores : ", variance)
-
-# Graphe des scores avec la moyenne
-plt.plot(np.arange(1, len(df_results.Accuracy) + 1), df_results.Accuracy, marker='o', linestyle='-')
-plt.axhline(y=moyenne, linestyle='--', color='red')
-plt.xlabel('Algo&Pipeline')
-plt.ylabel('Accuracy')
-plt.grid()
-plt.savefig('../../result_plt/score.png')
+# Afficher le résultat
+print(resultat_geocodage)
