@@ -131,7 +131,7 @@ with open(input_file_data_pkl, "rb") as f:
     datasms = pickle.load(f)
 
 #  define X and y (from the SMS data) for use with COUNTVECTORIZER
-X = datasms.clean_msg_pipeline_1
+X = datasms.clean_msg_pipeline_2
 y = datasms.label_num
 print(X.shape)
 print(y.shape)
