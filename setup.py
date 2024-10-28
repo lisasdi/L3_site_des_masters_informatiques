@@ -16,7 +16,9 @@ from scipy.stats import randint as sp_randint
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.linear_model import LogisticRegression
 # cross validation
-
+''' modifier le code pour ajouter une fonction qui teste les deux données qui sont stocké respectivement dans data.clean_msg_pipeline_1 et dat.clean_msg_pipeline_2 
+ mais au final df_result va contenir les deux resultats (dans df_result[algorithme] mettre = Regressionlogistique + nom du pipeline traité)
+'''
 import configparser
 
 config = configparser.ConfigParser()
@@ -141,8 +143,13 @@ model_hyper=randomCV.best_estimator_
 print("best estim : ",randomCV.best_estimator_)
 #appel fct train
 df_results=using_train_test_split(model_hyper,datasms, X, y,df_results)
-#model_hyper=DecisionTreeClassifier(max_features=9, min_samples_split=5)
+
+'''
+cross validation
+model_hyper=DecisionTreeClassifier(max_features=9, min_samples_split=5)
 df_results=cross_validation_modelfit(model_hyper,datasms, X, y, 5,df_results)
+
+'''
 # reporting
 print(df_results)
 #moyenne score
