@@ -85,22 +85,39 @@ def test_pipelines(data, df_results):
     X1 = data.clean_msg_pipeline_1
     y = data.label_num
     # Trouver les meilleurs hyperparamètres
-    clf = LogisticRegression()
-    param_grid = {
+    clf1 = LogisticRegression()
+    param_grid1 = {
         'C': [0.1, 1, 10, 100],
         'penalty': ['l1', 'l2']
     }
-    randomCV = find_hyper_parameters(clf,param_grid,X1, y)
+    clf2=RandomForestClassifier(random_state=1)
+    param_grid2 = { 
+    'n_estimators': [200, 500],
+    'max_features': ['auto', 'sqrt', 'log2'],
+    'max_depth' : [4,5,6,7,8],
+    'criterion' :['gini', 'entropy']
+    }
+    randomCV = find_hyper_parameters(clf1,param_grid1,X1, y)
     model_hyper = randomCV.best_estimator_
     print("Meilleur estimateur : ", model_hyper)
-    df_results = using_train_test_split(model_hyper, data, X1, y, df_results, "pipeline_1")
+    df_results = using_train_test_split(model_hyper, data, X1, y, df_results, "RLpipeline_1")
+
+    randomCV = find_hyper_parameters(clf2,param_grid2,X1, y)
+    model_hyper = randomCV.best_estimator_
+    print("Meilleur estimateur : ", model_hyper)
+    df_results = using_train_test_split(model_hyper, data, X1, y, df_results, "RSpipeline_1")
     
     # Test avec clean_msg_pipeline_2
     X2 = data.clean_msg_pipeline_2
-    randomCV = find_hyper_parameters(clf,param_grid,X2, y)
+    randomCV = find_hyper_parameters(clf2,param_grid,X2, y)
     model_hyper = randomCV.best_estimator_
     print("Meilleur estimateur : ", model_hyper)
     df_results = using_train_test_split(model_hyper, data, X2, y, df_results, "pipeline_2")
+
+    randomCV = find_hyper_parameters(clf2,param_grid2,X2, y)
+    model_hyper = randomCV.best_estimator_
+    print("Meilleur estimateur : ", model_hyper)
+    df_results = using_train_test_split(model_hyper, data, X2, y, df_results, "RSpipeline_1")
     
     return df_results
 
