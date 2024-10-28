@@ -1,161 +1,164 @@
-import pandas as pd
-from nltk.stem import PorterStemmer
-import string
-import re
-from bs4 import BeautifulSoup
+from sklearn.model_selection import train_test_split,GridSearchCV
 import pickle
-from sklearn.metrics import (
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    classification_report,
-)
-import matplotlib.pyplot as plt
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
+from preprocessing import plot_cm, reporting, read
+import time
 from sklearn import metrics
+from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import KFold, cross_val_score
 import numpy as np
-import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy.stats import randint as sp_randint
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.linear_model import LogisticRegression
+# cross validation
+
 import configparser
 
 config = configparser.ConfigParser()
 config.read('config.ini')
-input_file_english_txt = config['paths']['input_file_english_txt']
 
-# Importation des mots "stopwords" et les stocker dans une liste
-def stopwords(input_file_english_txt=config['paths']['input_file_english_txt']):
-    stopwordlist = []
-    with open(input_file_english_txt) as fichier:
-        for ligne in fichier:
-            newstring = "".join([i for i in ligne if not i.isdigit()])
-            newstring = re.sub("\n", "", newstring)
-            stopwordlist.append(newstring)
-    return stopwordlist
+def cross_validation_modelfit(model_hyper,data, X, y, splits,df_results):
+    
+    kf = KFold(n_splits=splits, random_state=1, shuffle=True)
+    #
+    # préparation des listes pour stocker les résultats
+    cv_scores = []
+    cv_scores_std = []
+    index_fold = 1
+    for train_index, test_index in kf.split(X):
+        X_train, X_test = np.array(X)[train_index], np.array(X)[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+        df_results=training_model(model_hyper,data,X_train,X_test, y_train, y_test,index_fold,df_results)
+        index_fold += 1
+    return df_results
+    
+def tf_idf_function(X_train,input_file_vectorisation=config['paths']['input_file_vectorisation']):
+    # instantiate the vectorizer
+    vect = CountVectorizer()
+    vect.fit(X_train)
+    # combine fit and transform into a single step
+    X_train_dtm = vect.fit_transform(X_train)
+    # TF IDF
+    tfidf_transformer = TfidfTransformer()
+    tfidf_transformer.fit_transform(X_train_dtm)
+    with open(input_file_vectorisation, "wb") as f:
+        pickle.dump(vect, f)
+    return X_train_dtm
 
+def find_hyper_parameters(X,y):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
+    clf=DecisionTreeClassifier()
+    clf1=LogisticRegression()
+    X_train_dtm=tf_idf_function(X_train)
+    '''    param_dist = {"max_depth": [None,3,10],
+              "max_features":  [1,3,5,8,10],
+              "min_samples_split": [2,5,10] ,#sp_randint(2, 11),
+              "min_samples_leaf": [1,2,4], #sp_randint(1, 11),
+              "criterion": ["gini", "entropy"]}'''
+    param_grid = {
+    'C': [0.1, 1, 10, 100],
+    'penalty': ['l1', 'l2']
+    }
+    samples = 8  # number of random samples 
+    GridSearch = GridSearchCV(clf1, param_grid=param_grid,cv=5)
+    GridSearch.fit(X_train_dtm, y_train)
+    return GridSearch
 
-# Fonction de nettoyage du message avec pipeline
-def process(review, pipeline):
-    stemmer = PorterStemmer()
+def training_model(model_hyper,data,X_train,X_test, y_train, y_test,index_fold,df_results,
+                   input_file_model_training=config['paths']['input_file_model_training']):
+    model = make_pipeline(
+    CountVectorizer(),
+    TfidfTransformer(),
+    model_hyper)
+    predictions = dict()
+    start = time.time()
+    model.fit(X_train, y_train)
+    predictions["DT"+str(index_fold)] = model.predict(X_test)
+    end = time.time() - start
     
-    # Étape 1 : Suppression des balises HTML
-    if pipeline.get("remove_html", True):
-        review = BeautifulSoup(review, "lxml").get_text()
-    
-    # Étape 2 : Suppression des URLs
-    if pipeline.get("remove_urls", True):
-        url_regex = r"(http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)"
-        review = re.sub(url_regex, "", review)
-    
-    # Étape 3 : Suppression des adresses email
-    if pipeline.get("remove_emails", True):
-        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-        review = re.sub(email_pattern, "", review)
-    
-    # Étape 4 : Suppression des chiffres
-    if pipeline.get("remove_numbers", True):
-        number_pattern = r"\d+"
-        review = re.sub(number_pattern, " ", review)
-    
-    # Étape 5 : Suppression de la ponctuation et normalisation
-    if pipeline.get("remove_punctuation", True):
-        review = re.sub("[^a-zA-Z]", " ", review)
-    
-    # Étape 6 : Conversion en minuscules
-    review = review.lower()
-    
-    # Étape 7 : Suppression des stopwords
-    if pipeline.get("remove_stopwords", True):
-        swords = set(stopwords())
-        review = [word for word in review.split() if word not in swords]
-    else:
-        review = review.split()
-    
-    # Étape 8 : Application du stemming
-    if pipeline.get("apply_stemming", True):
-        review = [stemmer.stem(word) for word in review]
-    
-    # Retourner le texte nettoyé
-    return " ".join(review)
+    plot_cm(y_test, predictions["DT"+str(index_fold)], data.label.unique(),index_fold)
 
+    # overfitting : underfitting
+    train_score = model.score(X_train, y_train)
+    test_score =model.score(X_test, y_test)
+        # report
+    df_results=reporting(predictions, y_test, end, train_score, test_score,df_results)
+        # save the model
+    with open(input_file_model_training +str(index_fold)+ ".pkl", "wb") as f:
+        pickle.dump(model, f)
+    return df_results
 
-# Fonction pour afficher la matrice de confusion
-def plot_cm(y_test, y_pred, class_names, index_fold, chemin_results=config['paths']['chemin_results_composition']):
-    disp = ConfusionMatrixDisplay(
-        confusion_matrix=confusion_matrix(y_test, y_pred), display_labels=class_names
-    )
-    disp.plot(cmap=plt.cm.Blues)
-    plt.suptitle("Composition " + str(index_fold))
-    plt.savefig(chemin_results + str(index_fold) + '.png')
-    plt.close()
+  
+    
+    
+    
+# train_test_split
+def using_train_test_split(model_hyper,data, X, y,df_results):
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=1)
+   
 
-
-# Affichage des comparaisons
-def reporting(predictions, y_test, time, train_score, test_score, df_results):
-    for name, y_pred in predictions.items():
-        report = classification_report(y_test, y_pred, output_dict=True)
-        df_results = pd.concat(
-            [
-                df_results,
-                pd.DataFrame.from_dict(
-                    {
-                        "Algorithm": name,
-                        "time": time,
-                        "test score": test_score,
-                        "train score": train_score,
-                        "Accuracy": metrics.accuracy_score(y_test, y_pred),
-                        "Precision": report["weighted avg"]["precision"],
-                        "Recall": report["weighted avg"]["recall"],
-                        "F1-Score": report["weighted avg"]["f1-score"],
-                    },
-                    orient="index",
-                ).T,
-            ],
-            ignore_index=True,
-        )
+    index_fold=0
+    df_results=training_model(model_hyper,data,X_train,X_test, y_train, y_test,index_fold,df_results)
     return df_results
 
 
-# Lecture et nettoyage des données avec différentes configurations de pipeline
-def read(path, col1="label", col2="message",
-         input_file_data_pkl=config['paths']['input_file_data_pkl'],
-         chemin_results_Distribution=config['paths']['chemin_results_Distribution']):
-    data = pd.read_csv(path, encoding="latin-1")
-    data.dropna(how="any", inplace=True, axis=1)
-    data.columns = [col1, col2]
-    data["label_num"] = data.label.map({"ham": 0, "spam": 1})
-    data["message_len"] = data.message.apply(len)
-    
-    # Définir deux pipelines différents pour le traitement
-    pipeline_1 = {
-        "remove_html": True,
-        "remove_urls": True,
-        "remove_emails": True,
-        "remove_numbers": True,
-        "remove_punctuation": True,
-        "remove_stopwords": True,
-        "apply_stemming": True
-    }
-    
-    pipeline_2 = pipeline_1.copy()
-    pipeline_2["remove_stopwords"] = False  # Ne pas supprimer les stopwords pour ce pipeline
-
-    # Nettoyer les messages avec les deux pipelines et stocker les résultats
-    data["clean_msg_pipeline_1"] = data.message.apply(lambda x: process(x, pipeline_1))
-    data["clean_msg_pipeline_2"] = data.message.apply(lambda x: process(x, pipeline_2))
-
-    # Sauvegarder les données nettoyées
-    with open(input_file_data_pkl, "wb") as f:
-        pickle.dump(data, f)
-    
-    # Visualiser la distribution des classes
-    fig, ax = plt.subplots()
-    data["label"].value_counts().plot.pie(
-        explode=[0, 0.1],
-        autopct="%1.1f%%",
-        ax=ax,
-        shadow=True,
-        startangle=300,
-        colors=["#b2b2b2", "#7575b2"],
+df_results = pd.DataFrame(
+        columns=[
+            "Algorithm",
+            "Precision",
+            "Recall",
+            "F1-Score",
+            "Accuracy",
+            "time",
+            "train score",
+            "test score",
+        ]
     )
-    ax.set_title("Distribution of spam and ham")
-    ax.figure.savefig(chemin_results_Distribution)
-    plt.close()
-    return data
-             
+
+
+input_file_data = config['paths']['input_file_data_csv']
+input_file_data_pkl=config['paths']['input_file_data_pkl']
+
+
+read(input_file_data)
+# load the data
+with open(input_file_data_pkl, "rb") as f:
+    datasms = pickle.load(f)
+
+#  define X and y (from the SMS data) for use with COUNTVECTORIZER
+X = datasms.clean_msg_pipeline_1
+y = datasms.label_num
+print(X.shape)
+print(y.shape)
+
+randomCV=find_hyper_parameters(X,y)
+model_hyper=randomCV.best_estimator_
+print("best estim : ",randomCV.best_estimator_)
+#appel fct train
+df_results=using_train_test_split(model_hyper,datasms, X, y,df_results)
+#model_hyper=DecisionTreeClassifier(max_features=9, min_samples_split=5)
+df_results=cross_validation_modelfit(model_hyper,datasms, X, y, 5,df_results)
+# reporting
+print(df_results)
+#moyenne score
+moyenne=np.mean(df_results.Accuracy)
+variance=np.var(df_results.Accuracy)
+std=np.std(df_results.Accuracy)
+print("moyenne des score",moyenne)
+print("ecart type des score",std)
+print("variance des score",variance)
+#graphe des scores avec la moyenne 
+folds=np.arange(1,len(df_results.Accuracy)+1)
+plt.plot(folds,df_results.Accuracy,marker='o',linestyle='-')
+plt.axhline(y=moyenne,linestyle='--',color='red')
+
+plt.xlabel('Folds')
+plt.ylabel('Accuracy')
+plt.grid()
+
+plt.savefig('../../result_plt/score.png')
