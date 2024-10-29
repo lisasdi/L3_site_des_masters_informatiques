@@ -1,9 +1,30 @@
 import pandas as pd
 import numpy as np
 
-# Supposons que la fonction EG_age_sexe existe dans un package nommé INEnrichissement
-# from INEnrichissement import EG_age_sexe 
+# Exemple de dictionnaire associant des prénoms et leur sexe probable
+prenom_sexe_dict = {
+    "Alice": "F", "Marie": "F", "Sophie": "F", "Clara": "F",
+    "Bob": "M", "David": "M", "Michel": "M", "Pierre": "M"
+}
 
+# Dictionnaire de probabilité basé sur les deux dernières lettres des prénoms
+bigramme_sexe_dict = {
+    "an": "M", "en": "M", "el": "M", "ic": "M",
+    "ie": "F", "la": "F", "na": "F", "ra": "F"
+}
+
+# Fonction d'estimation du sexe en utilisant d'abord le dictionnaire, puis les bigrammes
+def estimer_sexe(prenom):
+    # Vérifie si le prénom est dans le dictionnaire de prénoms
+    sexe_estime = prenom_sexe_dict.get(prenom)
+    if sexe_estime is not None:
+        return sexe_estime
+    
+    # Si le prénom n'est pas trouvé, utilise les deux dernières lettres (bigramme)
+    bigramme = prenom[-2:].lower()
+    return bigramme_sexe_dict.get(bigramme, "Inconnu")  # Renvoie "Inconnu" si pas de correspondance
+
+# Fonction enrichissement_age mise à jour
 def enrichissement_age(tb_client, prenom, sexe="NA", age_declare="NA", top_estim_sexe=1, codgeo="codgeo", ajust=0, var_ajust="NA"):
     """
     Fonction pour estimer l'âge des clients en fonction de leur prénom et lieu d'habitation.
@@ -22,14 +43,22 @@ def enrichissement_age(tb_client, prenom, sexe="NA", age_declare="NA", top_estim
     - pd.DataFrame : table enrichie avec des estimations d'âge et de sexe.
     """
     
-    # Appel de la fonction fictive EG_age_sexe pour enrichir les données
-    # La fonction EG_age_sexe devrait être importée depuis le package INEnrichissement et utilisée ici
-    # Par exemple : 
-    # result = EG_age_sexe(tb_client, prenom, sexe, age_declare, top_estim_sexe, codgeo, ajust, var_ajust)
+    # Estimation du sexe en fonction de top_estim_sexe
+    if top_estim_sexe == 1:
+        tb_client["e_sexe"] = tb_client[prenom].apply(estimer_sexe)
+    else:
+        tb_client["e_sexe"] = tb_client[sexe]
+    
 
-    # Simulons des colonnes de résultats pour l'exemple
-    tb_client["e_sexe"] = np.where(tb_client[prenom].str[-1].isin(["a", "e", "i"]), "F", "M") if top_estim_sexe == 1 else tb_client[sexe]
-    tb_client["e_annee_naissance"] = 2023 - np.random.randint(18, 80, tb_client.shape[0])  # Ex. année naissance estimée entre 18 et 80 ans
+    # Calcul de l'année de naissance en fonction de la colonne `age_declare` existante
+    # Si `age_declare` est NaN (non renseigné), on garde la logique de génération aléatoire
+
+    tb_client["e_annee_naissance"] = np.where(
+    tb_client["age_declare"].notna(),  # Vérifie si `age_declare` est renseigné
+    2023 - tb_client["age_declare"],    # Calcule l'année de naissance si l'âge est renseigné
+    2023 - np.random.randint(18, 80, tb_client.shape[0])  # Sinon, génère un âge aléatoire
+)
+
     tb_client["e_p_5ans"] = np.random.uniform(0.7, 0.95, tb_client.shape[0])  # Probabilité entre 0.7 et 0.95
     tb_client["indice_conf_age"] = np.random.choice(["Confiance -", "Confiance +", "Confiance ++"], tb_client.shape[0])
     tb_client["e_top_age_ok"] = np.where(tb_client[age_declare].notna(), 1, 2)
@@ -47,6 +76,23 @@ def enrichissement_age(tb_client, prenom, sexe="NA", age_declare="NA", top_estim
     return tb_client
 
 # Exemple d'utilisation
-# tb_client = pd.DataFrame({"prenom": ["Alice", "Bob", "Clara"], "codgeo": ["123450000", "234560000", "345670000"]})
-# result = enrichissement_age(tb_client, prenom="prenom", sexe="NA", age_declare="NA", top_estim_sexe=1, codgeo="codgeo", ajust=1, var_ajust="sexe")
-# print(result)
+tb_client = pd.DataFrame({
+    "prenom": ["Alice", "Bob", "Clara", "David", "Julian", "Karine"],
+    "codgeo": ["123450000", "234560000", "345670000", "456780000", "567890000", "678910000"],
+    "age_declare": [25, None, 45, None, 32, None],
+    "sexe": ["F", "M", "F", "M", "M", "F"]
+})
+
+result = enrichissement_age(
+    tb_client=tb_client,
+    prenom="prenom",
+    sexe="sexe",
+    age_declare="age_declare",
+    top_estim_sexe=1,       # Estimation du sexe à partir du prénom
+    codgeo="codgeo",
+    ajust=1,                # Ajustement de l'âge activé
+    var_ajust="sexe"        # Ajustement basé sur la variable "sexe"
+)
+
+# Affichage du résultat
+print(result)
