@@ -1,30 +1,14 @@
 import pandas as pd
 import numpy as np
 
-# Exemple de dictionnaire associant des prénoms et leur sexe probable
-prenom_sexe_dict = {
-    "Alice": "F", "Marie": "F", "Sophie": "F", "Clara": "F",
-    "Bob": "M", "David": "M", "Michel": "M", "Pierre": "M"
-}
+# Exemple de chargement du fichier des prénoms avec sexe associé
+# Remplacez 'fichier_prenom_sexe.csv' par le chemin réel de votre fichier
+fichier_prenom_sexe = pd.read_csv('fichier_prenom_sexe.csv', usecols=["01_prenom", "02_genre"])
 
-# Dictionnaire de probabilité basé sur les deux dernières lettres des prénoms
-bigramme_sexe_dict = {
-    "an": "M", "en": "M", "el": "M", "ic": "M",
-    "ie": "F", "la": "F", "na": "F", "ra": "F"
-}
+# Renommer les colonnes pour simplifier le mapping
+fichier_prenom_sexe.columns = ["prenom", "genre"]
 
-# Fonction d'estimation du sexe en utilisant d'abord le dictionnaire, puis les bigrammes
-def estimer_sexe(prenom):
-    # Vérifie si le prénom est dans le dictionnaire de prénoms
-    sexe_estime = prenom_sexe_dict.get(prenom)
-    if sexe_estime is not None:
-        return sexe_estime
-    
-    # Si le prénom n'est pas trouvé, utilise les deux dernières lettres (bigramme)
-    bigramme = prenom[-2:].lower()
-    return bigramme_sexe_dict.get(bigramme, "Inconnu")  # Renvoie "Inconnu" si pas de correspondance
-
-# Fonction enrichissement_age mise à jour
+# Fonction enrichissement_age mise à jour avec fusion de la table des prénoms
 def enrichissement_age(tb_client, prenom, sexe="NA", age_declare="NA", top_estim_sexe=1, codgeo="codgeo", ajust=0, var_ajust="NA"):
     """
     Fonction pour estimer l'âge des clients en fonction de leur prénom et lieu d'habitation.
@@ -45,26 +29,29 @@ def enrichissement_age(tb_client, prenom, sexe="NA", age_declare="NA", top_estim
     
     # Estimation du sexe en fonction de top_estim_sexe
     if top_estim_sexe == 1:
-        tb_client["e_sexe"] = tb_client[prenom].apply(estimer_sexe)
+        # Fusion des tables pour obtenir le sexe estimé
+        tb_client = tb_client.merge(fichier_prenom_sexe, how='left', left_on=prenom, right_on="prenom")
+        tb_client["e_sexe"] = tb_client["genre"].fillna("Inconnu")  # Si prénom absent dans le fichier, marquer comme "Inconnu"
     else:
         tb_client["e_sexe"] = tb_client[sexe]
     
-
-    # Calcul de l'année de naissance en fonction de la colonne `age_declare` existante
-    # Si `age_declare` est NaN (non renseigné), on garde la logique de génération aléatoire
-
+    # Suppression de la colonne "genre" (pour éviter les doublons)
+    tb_client.drop(columns=["genre"], inplace=True)
+    
+    # Estimation de l'année de naissance en utilisant `age_declare` si disponible
     tb_client["e_annee_naissance"] = np.where(
-    tb_client["age_declare"].notna(),  # Vérifie si `age_declare` est renseigné
-    2023 - tb_client["age_declare"],    # Calcule l'année de naissance si l'âge est renseigné
-    2023 - np.random.randint(18, 80, tb_client.shape[0])  # Sinon, génère un âge aléatoire
-)
+        tb_client[age_declare].notna(),
+        2023 - tb_client[age_declare],
+        2023 - np.random.randint(18, 80, tb_client.shape[0])
+    )
 
-    tb_client["e_p_5ans"] = np.random.uniform(0.7, 0.95, tb_client.shape[0])  # Probabilité entre 0.7 et 0.95
+    # Ajout d'autres champs simulés pour l'exemple
+    tb_client["e_p_5ans"] = np.random.uniform(0.7, 0.95, tb_client.shape[0])
     tb_client["indice_conf_age"] = np.random.choice(["Confiance -", "Confiance +", "Confiance ++"], tb_client.shape[0])
     tb_client["e_top_age_ok"] = np.where(tb_client[age_declare].notna(), 1, 2)
     tb_client["e_age"] = 2023 - tb_client["e_annee_naissance"]
-    
-    # Ajustement de l'âge estimé (si demandé)
+
+    # Ajustement de l'âge estimé si `ajust` est activé
     if ajust == 1:
         if var_ajust == "sexe" and sexe != "NA":
             mean_age_by_sex = tb_client.groupby(sexe)["e_age"].transform("mean")
