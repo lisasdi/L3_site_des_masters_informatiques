@@ -1,38 +1,36 @@
-tb_client["age_reel"] = 2023 - np.random.randint(0, 100, tb_client.shape[0])  # Simuler un âge réel entre 0 et 99 ans
+import numpy as np
+import pandas as pd
 
-    # Définir la plage pour l'âge déclaré s'il est disponible
-    tb_client["age_plage_min"] = np.where(
-        tb_client[age_declare] != "NA",
-        tb_client[age_declare].astype(float) - 5,
-        tb_client["e_age"] - 5
+# Exemple de DataFrame tb_client
+tb_client = pd.DataFrame({
+    "e_age": [30, 40, 25, 35, 50],  # Âges estimés
+    "age_reel": [28, 42, 24, 36, 55],  # Âges réels
+    "age_declare": [29, 39, 26, None, 52]  # Âges déclarés (None pour simuler un âge manquant)
+})
+
+# Vérification si l'âge estimé est aussi dans la plage de +/- 5 de l'âge déclaré
+tb_client["indice_conf_age"] = np.where(
+    tb_client["age_declare"].notna(),  # Vérifie si age_declare est présent
+    np.where(
+        (tb_client["e_age"] >= tb_client["age_declare"] - 5) & (tb_client["e_age"] <= tb_client["age_declare"] + 5),
+        "Confiance ++",  # Âge estimé dans l'intervalle de l'âge déclaré
+        np.where(
+            (tb_client["e_age"] >= tb_client["age_declare"] - 3) & (tb_client["e_age"] <= tb_client["age_declare"] + 3),
+            "Confiance +",  # Âge estimé proche de l'âge déclaré
+            "Confiance -"   # Âge estimé éloigné de l'âge déclaré
+        )
+    ),
+    # Si age_declare n'est pas présent, on compare avec age_reel
+    np.where(
+        (tb_client["e_age"] >= tb_client["age_reel"] - 5) & (tb_client["e_age"] <= tb_client["age_reel"] + 5),
+        "Confiance ++",  # Âge estimé dans l'intervalle de l'âge réel
+        np.where(
+            (tb_client["e_age"] >= tb_client["age_reel"] - 3) & (tb_client["e_age"] <= tb_client["age_reel"] + 3),
+            "Confiance +",  # Âge estimé proche de l'âge réel
+            "Confiance -"   # Âge estimé éloigné de l'âge réel
+        )
     )
-    tb_client["age_plage_max"] = np.where(
-        tb_client[age_declare] != "NA",
-        tb_client[age_declare].astype(float) + 5,
-        tb_client["e_age"] + 5
-    )
+)
 
-    # Vérifier si age_reel est dans la plage
-    tb_client["e_p_5ans"] = np.where(
-        (tb_client["age_reel"] >= tb_client["age_plage_min"]) & (tb_client["age_reel"] <= tb_client["age_plage_max"]),
-        1.0,  # Probabilité = 1 (dans la fourchette)
-        0.0   # Probabilité = 0 (en dehors de la fourchette)
-    )
-
-    # On peut aussi estimer une probabilité réaliste (ex. : 70% de chance)
-    tb_client["e_p_5ans"] = np.random.uniform(0.6, 1.0, tb_client.shape[0])  # Générer une probabilité aléatoire entre 0.6 et 1.0
-
-    # Autres champs ajoutés
-    tb_client["indice_conf_age"] = np.random.choice(["Confiance -", "Confiance +", "Confiance ++"], tb_client.shape[0])
-    tb_client["e_top_age_ok"] = np.where(tb_client[age_declare] != "NA", 1, 2)
-
-    # Ajustement de l'âge estimé si `ajust` est activé
-    if ajust == 1:
-        if var_ajust == "sexe" and sexe != "NA":
-            mean_age_by_sex = tb_client.groupby(sexe)["e_age"].transform("mean")
-            tb_client["e_age"] = tb_client["e_age"] * 0.5 + mean_age_by_sex * 0.5
-        else:
-            mean_age = tb_client["e_age"].mean()
-            tb_client["e_age"] = tb_client["e_age"] * 0.5 + mean_age * 0.5
-
-    return tb_client
+# Affichage du DataFrame pour voir les résultats
+print(tb_client)
