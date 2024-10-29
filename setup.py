@@ -1,36 +1,32 @@
-import numpy as np
 import pandas as pd
 
-# Exemple de DataFrame tb_client
-tb_client = pd.DataFrame({
-    "e_age": [30, 40, 25, 35, 50],  # Âges estimés
-    "age_reel": [28, 42, 24, 36, 55],  # Âges réels
-    "age_declare": [29, 39, 26, None, 52]  # Âges déclarés (None pour simuler un âge manquant)
-})
+# Définir les noms des colonnes
+columns = [
+    'age_retraite', 'age_etud', 'RFMD911', 'TX_SEUL', 'TX_FAMMONO',
+    'TX_COUPSENF', 'TX_COUPAENF', 'et_niv0', 'et_niv1', 'et_niv2',
+    'propr', 'locat', 'locat_hlm', 'h_ind', 't_comm', 'typocom',
+    'rev', 'c_indice_qualite_rev', 'codgeo', 't_mm', 't_m',
+    't_p', 't_pp', 'c_indice_qualite_formation', 
+    'c_indice_qualite_menage', 'c_indice_qualite_pcs', 
+    'c_indice_qualite_logement'
+]
 
-# Vérification si l'âge estimé est aussi dans la plage de +/- 5 de l'âge déclaré
-tb_client["indice_conf_age"] = np.where(
-    tb_client["age_declare"].notna(),  # Vérifie si age_declare est présent
-    np.where(
-        (tb_client["e_age"] >= tb_client["age_declare"] - 5) & (tb_client["e_age"] <= tb_client["age_declare"] + 5),
-        "Confiance ++",  # Âge estimé dans l'intervalle de l'âge déclaré
-        np.where(
-            (tb_client["e_age"] >= tb_client["age_declare"] - 3) & (tb_client["e_age"] <= tb_client["age_declare"] + 3),
-            "Confiance +",  # Âge estimé proche de l'âge déclaré
-            "Confiance -"   # Âge estimé éloigné de l'âge déclaré
-        )
-    ),
-    # Si age_declare n'est pas présent, on compare avec age_reel
-    np.where(
-        (tb_client["e_age"] >= tb_client["age_reel"] - 5) & (tb_client["e_age"] <= tb_client["age_reel"] + 5),
-        "Confiance ++",  # Âge estimé dans l'intervalle de l'âge réel
-        np.where(
-            (tb_client["e_age"] >= tb_client["age_reel"] - 3) & (tb_client["e_age"] <= tb_client["age_reel"] + 3),
-            "Confiance +",  # Âge estimé proche de l'âge réel
-            "Confiance -"   # Âge estimé éloigné de l'âge réel
-        )
-    )
-)
+# Créer un DataFrame vide avec les colonnes spécifiées
+data = {col: [] for col in columns}
+df = pd.DataFrame(data)
 
-# Affichage du DataFrame pour voir les résultats
-print(tb_client)
+# Ligne de données à ajouter
+new_row = [
+    61.492561655, 20.368774861, 5286796.0, 0.2992502717, 0.0772720075,
+    0.2878364175, 0.3356413033, 0.5949565723, 0.2942930658, 0.1107503619,
+    0.5569637793, 0.4430362207, 0.1255349379, 0.6528859022, None, None,
+    26088.555036, 0.0, '01', 0.3213259577, 0.2559894605, 0.2958020782,
+    0.1268825036, 0.0, 1.0, 0.0, 0.0
+]
+
+# Ajouter la nouvelle ligne au DataFrame
+df.loc[len(df)] = new_row
+
+# Afficher le DataFrame avec la nouvelle ligne
+print(df)
+
