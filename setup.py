@@ -1,14 +1,15 @@
 import pandas as pd
 
-def enrichissement_geomarketing(table_initiale, codgeo, var_sexe, var_age):
+def enrichissement_geomarketing(table_initiale, codgeo, var_sexe, var_age, proba_filepath):
     """
-    Enrichissement géomarketing des données socio-démographiques.
+    Enrichissement géomarketing des données socio-démographiques avec ajout de probabilités d'avoir des enfants.
     
     Args:
     - table_initiale (pd.DataFrame): Table de données au format table
     - codgeo (str): Nom du champ contenant le code géographique
     - var_sexe (str): Nom du champ contenant le sexe
     - var_age (str): Nom du champ contenant l'âge
+    - proba_filepath (str): Chemin du fichier CSV contenant les probabilités par sexe et âge.
     
     Returns:
     - pd.DataFrame: Table enrichie avec des données socio-démographiques
@@ -20,63 +21,69 @@ def enrichissement_geomarketing(table_initiale, codgeo, var_sexe, var_age):
         if col not in table_initiale.columns:
             raise ValueError(f"La colonne {col} est absente de la table_initiale.")
     
-    # Simulation de l'enrichissement, car la fonction EG_Enrichissement_Geomk n'est pas définie
+    # Création d'une copie de la table pour enrichir les données
     enriched_data = table_initiale.copy()
     
-    # Ajout de colonnes d'enrichissement (valeurs fictives pour l'exemple)
-    enriched_data['e_PCS'] = "Catégorie X"  # Catégorie socio professionnelle estimée
-    enriched_data['c_indice_qualite_pcs'] = 0.85  # Indice de qualité de l’estimation de la PCS
-    enriched_data['e_situation_fam'] = "Célibataire"  # Situation familiale estimée
-    enriched_data['c_indice_qualite_menage'] = 0.75  # Indice de qualité de l’estimation de la situation familiale
-    enriched_data['e_etudes'] = "Licence"  # Niveau d’études estimé
-    enriched_data['c_indice_qualite_formation'] = 0.80  # Indice de qualité de l’estimation du niveau d’études
+    # Ajout des informations socio-démographiques simulées (exemple fictif)
+    enriched_data['e_PCS'] = "Catégorie X"
+    enriched_data['c_indice_qualite_pcs'] = 0.85
+    enriched_data['e_situation_fam'] = "Célibataire"
+    enriched_data['c_indice_qualite_menage'] = 0.75
+    enriched_data['e_etudes'] = "Licence"
+    enriched_data['c_indice_qualite_formation'] = 0.80
     
-    # Probabilités et classes estimées
-    enriched_data['h_ind'] = 0.6  # Probabilité d’habiter en habitation individuelle
-    enriched_data['locat_hlm'] = 0.3  # Probabilité d’habiter en HLM
-    enriched_data['e_habitat_individuel'] = "Individuel"  # Classe d’habitation individuelle estimée
-    enriched_data['e_habitat_hlm'] = "HLM"  # Classe d’habitation HLM estimée
-    enriched_data['e_statut_hab'] = "Propriétaire"  # Statut d’habitation estimé
-    enriched_data['c_indice_qualite_logement'] = 0.78  # Indice de qualité de l’estimation du statut d’habitation
+    # Lecture du fichier CSV contenant les probabilités d'enfants
+    sexe_age_proba = pd.read_csv(proba_filepath)
     
-    # Enfants estimés
-    enriched_data['e_proba_1_enfant'] = 0.5  # Classe de probabilité d’avoir au moins 1 enfant
-    enriched_data['e_proba_2_enfants'] = 0.3  # Classe de probabilité d’avoir au moins 2 enfants
-    enriched_data['e_proba_m5'] = 0.2  # Classe de probabilité d’avoir 1 enfant de moins de 5 ans
-    enriched_data['e_proba_5_10'] = 0.15  # Classe de probabilité d’avoir 1 enfant âgé entre 5 et 10 ans
-    enriched_data['e_proba_10_15'] = 0.1  # Classe de probabilité d’avoir 1 enfant âgé entre 10 et 15 ans
-    enriched_data['e_proba_15_20'] = 0.05  # Classe de probabilité d’avoir 1 enfant âgé entre 15 et 20 ans
+    # Création de la colonne `sexe_age` dans `enriched_data` et `sexe_age_proba` pour la fusion
+    enriched_data["sexe_age"] = enriched_data[var_sexe] + enriched_data[var_age].astype(str)
+    sexe_age_proba["sexe_age"] = sexe_age_proba["sexe"] + sexe_age_proba["age"].astype(str)
     
-    # Informations sur la commune
-    enriched_data['e_typo_commune_2010'] = "Urbain"  # Typologie de la commune de résidence
-    enriched_data['e_taille_commune'] = "Grande"  # Taille de la commune de résidence
-    enriched_data['e_seg_commerces'] = "Commerce A"  # Segmentation commerce du lieu d’habitation
-    enriched_data['e_sous_seg_commerces'] = "Sous-seg A"  # Sous segmentation commerce du lieu d’habitation
-    enriched_data['e_seg_logement'] = "Logement A"  # Segmentation logement du lieu d’habitation
+    # Fusion des tables en utilisant `sexe_age` comme clé
+    enriched_data = enriched_data.merge(sexe_age_proba, on="sexe_age", how="left")
     
-    # Revenu estimé
-    enriched_data['i_rev'] = 35000  # Revenu annuel estimé
-    enriched_data['e_revenus'] = "Moyen"  # Classe de revenu estimé
-    enriched_data['e_decile'] = 5  # Décile de revenu estimé
-    enriched_data['c_indice_qualite_rev'] = 0.82  # Indice de qualité de l’estimation du revenu
+    # Renommer les colonnes importées depuis le CSV pour qu'elles correspondent aux champs de sortie
+    enriched_data.rename(columns={
+        "p_1enf": "e_proba_1_enfant",
+        "p_2enf": "e_proba_2_enfants",
+        "proba_m5": "e_proba_m5",
+        "proba_5_10": "e_proba_5_10",
+        "proba_10_15": "e_proba_10_15",
+        "proba_15_20": "e_proba_15_20"
+    }, inplace=True)
     
-    # Informations géographiques
-    enriched_data['e_dept'] = "75"  # Département de résidence
-    enriched_data['e_region_9'] = "Île-de-France"  # Grande région de résidence
-    enriched_data['e_Region'] = "Région X"  # Région de résidence
-    enriched_data['e_lib_dept'] = "Paris"  # Libellé du département de résidence
-    enriched_data['e_reg'] = "11"  # Numéro de région de résidence
+    # Suppression de la colonne temporaire `sexe_age`
+    enriched_data.drop(columns="sexe_age", inplace=True)
+    
+    # Informations géographiques et autres enrichissements fictifs pour compléter
+    enriched_data['e_typo_commune_2010'] = "Urbain"
+    enriched_data['e_taille_commune'] = "Grande"
+    enriched_data['e_seg_commerces'] = "Commerce A"
+    enriched_data['e_sous_seg_commerces'] = "Sous-seg A"
+    enriched_data['e_seg_logement'] = "Logement A"
+    
+    enriched_data['i_rev'] = 35000
+    enriched_data['e_revenus'] = "Moyen"
+    enriched_data['e_decile'] = 5
+    enriched_data['c_indice_qualite_rev'] = 0.82
+    
+    enriched_data['e_dept'] = "75"
+    enriched_data['e_region_9'] = "Île-de-France"
+    enriched_data['e_Region'] = "Région X"
+    enriched_data['e_lib_dept'] = "Paris"
+    enriched_data['e_reg'] = "11"
     
     return enriched_data
 
 # Exemple d'utilisation
 table_initiale = pd.DataFrame({
     "codgeo": ["75001", "75002", "75003"],
-    "var_sexe": ["M", "F", "M"],
-    "var_age": [30, 25, 40]
+    "sexe": ["M", "F", "M"],
+    "age": [30, 25, 40]
 })
 
-testGeomk = enrichissement_geomarketing(table_initiale, "codgeo", "var_sexe", "var_age")
+# Appel de la fonction en spécifiant le chemin du fichier CSV de probabilités
+testGeomk = enrichissement_geomarketing(table_initiale, "codgeo", "sexe", "age", "sexe_age.csv")
 
 # Affichage du résultat
 print(testGeomk)
