@@ -1,8 +1,13 @@
-# Traiter la colonne genre pour gérer les genres multiples
-def choose_random_gender(gender_string):
-    # Sépare les genres par la virgule et choisit un genre aléatoire
-    genders = [g.strip().upper() for g in gender_string.split(',')]
-    return np.random.choice(genders)
+   # Estimation du sexe en fonction de top_estim_sexe
+    if top_estim_sexe == 1:
+        # Fusion des tables pour obtenir le sexe estimé
+        tb_client = tb_client.merge(fichier_prenom_sexe, how='left', left_on=prenom, right_on="prenom")
+        
+        # Créer e_sexe en fonction de la présence de la colonne sexe
+        if sexe is None or sexe not in tb_client.columns:
+            tb_client["e_sexe"] = tb_client["genre"].fillna("Inconnu")  # Remplir avec le genre estimé
+        else:
+            tb_client["e_sexe"] = np.where(tb_client[sexe].isna(), tb_client["genre"].fillna("Inconnu"), tb_client[sexe])
 
-# Appliquer la fonction pour choisir un genre
-fichier_prenom_sexe["genre"] = fichier_prenom_sexe["genre"].apply(choose_random_gender)
+    # Suppression de la colonne "genre" (pour éviter les doublons)
+    tb_client.drop(columns=["genre"], inplace=True)
