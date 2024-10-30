@@ -1,93 +1,123 @@
-# Import des fonctions d'enrichissement
-from .geocodage import EG_Insee_Iris
-from .enrichissement_age import EG_age_sexe
-from .enrichissement_geomk import EG_Enrichissement_Geomk
-from .profil import EG_profil
 import pandas as pd
 import os
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.chart import BarChart, Reference
 
-def enrichissement_geographique(table_initiale, chemin_sortie):
+def generate_excel_report(df_summary, sortie_path):
     """
-    Fonction principale d'enrichissement géomarketing qui applique les différentes étapes :
-    1. Ajout de codes géographiques
-    2. Enrichissement avec les données socio-démographiques
-    3. Génération de profils pour analyse
+    Génère un fichier Excel comparant une population cible avec une population totale.
+    
+    Args:
+    - df_summary (pd.DataFrame): DataFrame contenant les statistiques de comparaison
+    - sortie_path (str): Chemin de sortie du fichier Excel
+    """
+
+    # Création du classeur Excel et ajout de la feuille "Résumé"
+    wb = Workbook()
+    ws_summary = wb.active
+    ws_summary.title = "Résumé"
+
+    # Ajout des données de df_summary à la feuille "Résumé"
+    for row in dataframe_to_rows(df_summary, index=False, header=True):
+        ws_summary.append(row)
+
+    # Mise en forme conditionnelle pour la colonne des différences
+    for cell in ws_summary['D'][2:]:  # Exclut l'en-tête
+        if isinstance(cell.value, (int, float)) and abs(cell.value) > 5:
+            cell.fill = PatternFill(start_color="FF9999", end_color="FF9999", fill_type="solid")
+
+    # Création d'un graphique de comparaison
+    chart = BarChart()
+    data = Reference(ws_summary, min_col=2, max_col=3, min_row=1, max_row=ws_summary.max_row)
+    cats = Reference(ws_summary, min_col=1, min_row=2, max_row=ws_summary.max_row)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(cats)
+    chart.title = "Comparaison Population Cible vs Totale"
+    ws_summary.add_chart(chart, "F2")
+
+    # Sauvegarde du fichier Excel
+    wb.save(sortie_path)
+
+def EG_profil(sortie, table, var_age, var_sexe, var_pop1=None, modalite_pop1=None, var_pop2=None, modalite_pop2=None, code_geo=None, zone_geo=None):
+    """
+    Fonction pour réaliser des profils comparatifs sur des données enrichies et générer un fichier Excel.
 
     Args:
-    - table_initiale (pd.DataFrame): Table de données d'origine.
-    - chemin_sortie (str): Chemin vers le dossier de sortie pour les résultats.
-    
+    - sortie (str): Chemin de sortie pour le fichier généré.
+    - table (pd.DataFrame): Table de données à analyser.
+    - var_age (str): Nom de la colonne contenant l'âge.
+    - var_sexe (str): Nom de la colonne contenant le sexe.
+    - var_pop1 (str): Variable pour la population 1 (pour comparaisons spécifiques).
+    - modalite_pop1 (str): Modalité pour la population 1.
+    - var_pop2 (str): Variable pour la population 2 (pour comparaisons spécifiques).
+    - modalite_pop2 (str): Modalité pour la population 2.
+    - code_geo (str): Code géographique à utiliser pour une comparaison géographique.
+    - zone_geo (str): Valeur géographique pour la restriction.
+
     Returns:
-    - pd.DataFrame: Table enrichie avec toutes les informations ajoutées.
+    - pd.DataFrame: Un DataFrame avec les résultats des profils générés.
     """
     
-    # Étape 1: Ajout des codes géographiques via EG_Insee_Iris
-    print("Étape 1: Ajout des codes géographiques")
-    table_insee = EG_Insee_Iris(table_initiale)
-    
-    # Étape 2: Enrichissement socio-démographique avec l'âge et le sexe via EG_age_sexe
-    print("Étape 2: Enrichissement par âge et sexe")
-    table_age_sexe = EG_age_sexe(table_insee, "sexe", "age")
-    
-    # Étape 3: Enrichissement géomarketing avec les données socio-économiques
-    print("Étape 3: Enrichissement géomarketing")
-    table_enrichie = EG_Enrichissement_Geomk(table_age_sexe, "codgeo", "sexe", "age")
-    
-    # Vérification du dossier de sortie
-    os.makedirs(chemin_sortie, exist_ok=True)
-    
-    # Étape 4: Génération de profils pour l'analyse
-    print("Étape 4: Génération de profils")
-    
-    # Comparaison d’une population cible vs population totale
-    EG_profil(
-        sortie=os.path.join(chemin_sortie, "Profil cible"),
-        table=table_enrichie,
-        var_age="age",
-        var_sexe="sexe",
-        var_pop1="csp",
-        modalite_pop1="Cadres"  # Exemple de modalité cible
-    )
-    
-    # Comparaison de 2 populations
-    EG_profil(
-        sortie=os.path.join(chemin_sortie, "Profil cible1 VS cible2"),
-        table=table_enrichie,
-        var_age="age",
-        var_sexe="sexe",
-        var_pop1="csp",
-        modalite_pop1="Cadres",
-        var_pop2="csp",
-        modalite_pop2="Employés"  # Exemple de deuxième modalité cible
-    )
-    
-    # Comparaison avec la population globale d’une zone géographique
-    EG_profil(
-        sortie=os.path.join(chemin_sortie, "Profil zone geo"),
-        table=table_enrichie,
-        var_age="age",
-        var_sexe="sexe",
-        code_geo="e_dept",
-        zone_geo="75"  # Exemple de département cible
-    )
-    
-    # Sauvegarde de la table enrichie finale
-    fichier_sortie = os.path.join(chemin_sortie, "table_enrichie_complete.csv")
-    table_enrichie.to_csv(fichier_sortie, index=False)
-    print(f"Table enrichie sauvegardée à: {fichier_sortie}")
-    
-    return table_enrichie
+    # Assurez-vous que le dossier de sortie existe
+    os.makedirs(sortie, exist_ok=True)
 
-# Exemple d'utilisation
-if __name__ == "__main__":
-    # Chargement de la table initiale
-    table_initiale = pd.DataFrame({
-        "codgeo": ["75001", "75002", "75003"],
-        "sexe": ["M", "F", "M"],
-        "age": [30, 25, 40]
-    })
-    
-    chemin_sortie = "chemin/vers/le/dossier/Sorties"
-    
-    # Appel de la fonction principale
-    table_enrichie_finale = enrichissement_geographique(table_initiale, chemin_sortie)
+    # Analyse et génération des profils
+    result_df = pd.DataFrame()  # Initialisation du DataFrame de résultat
+
+    if var_pop1 and modalite_pop1:  # Comparaison cible vs totale
+        population_cible = table[table[var_pop1] == modalite_pop1]
+        population_totale = table
+        
+        # Calcul des statistiques
+        result_cible_vs_totale = {
+            'Indicateur': ["Population cible", "Population totale"],
+            'Effectif': [len(population_cible), len(population_totale)],
+            'Pourcentage': [100 * len(population_cible) / len(population_totale), 100]
+        }
+        
+        result_df = pd.DataFrame(result_cible_vs_totale)
+
+        # Enregistrement CSV et génération Excel
+        csv_path = os.path.join(sortie, 'profil_cible_vs_totale.csv')
+        result_df.to_csv(csv_path, index=False)
+        excel_path = os.path.join(sortie, '2016_modele_profil_cible.xlsx')
+        generate_excel_report(result_df, excel_path)
+
+    if var_pop1 and modalite_pop1 and var_pop2 and modalite_pop2:  # Comparaison de 2 populations
+        population_cible1 = table[table[var_pop1] == modalite_pop1]
+        population_cible2 = table[table[var_pop2] == modalite_pop2]
+        
+        result_cible1_vs_cible2 = {
+            'Indicateur': ["Cible 1", "Cible 2"],
+            'Effectif': [len(population_cible1), len(population_cible2)],
+            'Pourcentage': [100 * len(population_cible1) / len(table), 100 * len(population_cible2) / len(table)]
+        }
+        
+        result_df = pd.DataFrame(result_cible1_vs_cible2)
+
+        # Enregistrement CSV et génération Excel
+        csv_path = os.path.join(sortie, 'profil_cible1_vs_cible2.csv')
+        result_df.to_csv(csv_path, index=False)
+        excel_path = os.path.join(sortie, '2016_modele_profil_cible_vs_cible.xlsx')
+        generate_excel_report(result_df, excel_path)
+
+    if code_geo and zone_geo:  # Comparaison géographique
+        population_geo = table[table[code_geo] == zone_geo]
+        
+        result_geo = {
+            'Indicateur': ["Population géographique", "Population totale"],
+            'Effectif': [len(population_geo), len(table)],
+            'Pourcentage': [100 * len(population_geo) / len(table), 100]
+        }
+        
+        result_df = pd.DataFrame(result_geo)
+
+        # Enregistrement CSV et génération Excel
+        csv_path = os.path.join(sortie, 'profil_zone_geo.csv')
+        result_df.to_csv(csv_path, index=False)
+        excel_path = os.path.join(sortie, '2016_modele_profil_zone_geo.xlsx')
+        generate_excel_report(result_df, excel_path)
+
+    return result_df
