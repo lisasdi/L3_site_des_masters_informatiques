@@ -1,120 +1,93 @@
+# Import des fonctions d'enrichissement
+from .geocodage import EG_Insee_Iris
+from .enrichissement_age import EG_age_sexe
+from .enrichissement_geomk import EG_Enrichissement_Geomk
+from .profil import EG_profil
 import pandas as pd
 import os
 
-def EG_profil(sortie, table, var_age, var_sexe, var_pop1=None, modalite_pop1=None, var_pop2=None, modalite_pop2=None, code_geo=None, zone_geo=None):
+def enrichissement_geographique(table_initiale, chemin_sortie):
     """
-    Fonction pour réaliser des profils comparatifs sur des données enrichies.
+    Fonction principale d'enrichissement géomarketing qui applique les différentes étapes :
+    1. Ajout de codes géographiques
+    2. Enrichissement avec les données socio-démographiques
+    3. Génération de profils pour analyse
 
     Args:
-    - sortie (str): Chemin de sortie pour le fichier CSV généré.
-    - table (pd.DataFrame): Table de données à analyser.
-    - var_age (str): Nom de la colonne contenant l'âge.
-    - var_sexe (str): Nom de la colonne contenant le sexe.
-    - var_pop1 (str): Variable pour la population 1 (pour comparaisons spécifiques).
-    - modalite_pop1 (str): Modalité pour la population 1.
-    - var_pop2 (str): Variable pour la population 2 (pour comparaisons spécifiques).
-    - modalite_pop2 (str): Modalité pour la population 2.
-    - code_geo (str): Code géographique à utiliser pour une comparaison géographique.
-    - zone_geo (str): Valeur géographique pour la restriction.
-
+    - table_initiale (pd.DataFrame): Table de données d'origine.
+    - chemin_sortie (str): Chemin vers le dossier de sortie pour les résultats.
+    
     Returns:
-    - pd.DataFrame: Un DataFrame avec les résultats des profils générés.
+    - pd.DataFrame: Table enrichie avec toutes les informations ajoutées.
     """
     
-    # Assurez-vous que le dossier de sortie existe
-    os.makedirs(sortie, exist_ok=True)
+    # Étape 1: Ajout des codes géographiques via EG_Insee_Iris
+    print("Étape 1: Ajout des codes géographiques")
+    table_insee = EG_Insee_Iris(table_initiale)
+    
+    # Étape 2: Enrichissement socio-démographique avec l'âge et le sexe via EG_age_sexe
+    print("Étape 2: Enrichissement par âge et sexe")
+    table_age_sexe = EG_age_sexe(table_insee, "sexe", "age")
+    
+    # Étape 3: Enrichissement géomarketing avec les données socio-économiques
+    print("Étape 3: Enrichissement géomarketing")
+    table_enrichie = EG_Enrichissement_Geomk(table_age_sexe, "codgeo", "sexe", "age")
+    
+    # Vérification du dossier de sortie
+    os.makedirs(chemin_sortie, exist_ok=True)
+    
+    # Étape 4: Génération de profils pour l'analyse
+    print("Étape 4: Génération de profils")
+    
+    # Comparaison d’une population cible vs population totale
+    EG_profil(
+        sortie=os.path.join(chemin_sortie, "Profil cible"),
+        table=table_enrichie,
+        var_age="age",
+        var_sexe="sexe",
+        var_pop1="csp",
+        modalite_pop1="Cadres"  # Exemple de modalité cible
+    )
+    
+    # Comparaison de 2 populations
+    EG_profil(
+        sortie=os.path.join(chemin_sortie, "Profil cible1 VS cible2"),
+        table=table_enrichie,
+        var_age="age",
+        var_sexe="sexe",
+        var_pop1="csp",
+        modalite_pop1="Cadres",
+        var_pop2="csp",
+        modalite_pop2="Employés"  # Exemple de deuxième modalité cible
+    )
+    
+    # Comparaison avec la population globale d’une zone géographique
+    EG_profil(
+        sortie=os.path.join(chemin_sortie, "Profil zone geo"),
+        table=table_enrichie,
+        var_age="age",
+        var_sexe="sexe",
+        code_geo="e_dept",
+        zone_geo="75"  # Exemple de département cible
+    )
+    
+    # Sauvegarde de la table enrichie finale
+    fichier_sortie = os.path.join(chemin_sortie, "table_enrichie_complete.csv")
+    table_enrichie.to_csv(fichier_sortie, index=False)
+    print(f"Table enrichie sauvegardée à: {fichier_sortie}")
+    
+    return table_enrichie
 
-    # Exemple d'analyse (calculs de pourcentages, moyennes, etc.)
-    if var_pop1 and modalite_pop1:  # Si la population 1 est spécifiée
-        population_cible = table[table[var_pop1] == modalite_pop1]
-        population_totale = table
-        
-        # Comparaison de la population cible avec la population totale
-        result_cible_vs_totale = {
-            'Total': len(population_totale),
-            'Cible': len(population_cible),
-            'Pourcentage Cible': (len(population_cible) / len(population_totale)) * 100
-        }
-        
-        # Créez un DataFrame pour sauvegarder les résultats
-        result_df = pd.DataFrame([result_cible_vs_totale])
-        result_df.to_csv(os.path.join(sortie, 'profil_cible_vs_totale.csv'), index=False)
-
-    if var_pop1 and modalite_pop1 and var_pop2 and modalite_pop2:  # Si les deux populations sont spécifiées
-        population_cible1 = table[table[var_pop1] == modalite_pop1]
-        population_cible2 = table[table[var_pop2] == modalite_pop2]
-        
-        # Comparaison entre les deux populations
-        result_cible1_vs_cible2 = {
-            'Cible 1': modalite_pop1,
-            'Taille Cible 1': len(population_cible1),
-            'Cible 2': modalite_pop2,
-            'Taille Cible 2': len(population_cible2),
-            'Pourcentage Cible 1': (len(population_cible1) / len(table)) * 100,
-            'Pourcentage Cible 2': (len(population_cible2) / len(table)) * 100
-        }
-        
-        # Créez un DataFrame pour sauvegarder les résultats
-        result_df_2 = pd.DataFrame([result_cible1_vs_cible2])
-        result_df_2.to_csv(os.path.join(sortie, 'profil_cible1_vs_cible2.csv'), index=False)
-
-    if code_geo and zone_geo:  # Comparaison géographique
-        population_geo = table[table[code_geo] == zone_geo]
-        
-        # Résumé géographique
-        result_geo = {
-            'Zone Géographique': zone_geo,
-            'Taille Population': len(population_geo),
-            'Pourcentage Population': (len(population_geo) / len(table)) * 100
-        }
-        
-        # Créez un DataFrame pour sauvegarder les résultats
-        result_df_geo = pd.DataFrame([result_geo])
-        result_df_geo.to_csv(os.path.join(sortie, 'profil_zone_geo.csv'), index=False)
-
-    return result_df if var_pop1 and modalite_pop1 else (result_df_2 if var_pop1 and modalite_pop1 and var_pop2 and modalite_pop2 else result_df_geo)
-
-# Exemple d'utilisation de la fonction
-# table_enrichie doit être définie dans votre contexte
-# Assurez-vous que la table_enrichie est un DataFrame pandas
-table_enrichie = pd.DataFrame({
-    "age": [30, 40, 35],
-    "sexe": ["F", "M", "F"],
-    "csp": ["Cadres", "Employés", "Artisans"],
-    "e_dept": ["75", "75", "91"]  # Exemple de colonne de département
-})
-
-# Appel des profils
-result1 = EG_profil(
-    sortie="chemin/vers/le/dossier/Sorties/Profil cible",
-    table=table_enrichie,
-    var_age="age",
-    var_sexe="sexe",
-    var_pop1="csp",
-    modalite_pop1="Cadres"
-)
-
-result2 = EG_profil(
-    sortie="chemin/vers/le/dossier/Sorties/Profil cible1 VS cible2",
-    table=table_enrichie,
-    var_age="age",
-    var_sexe="sexe",
-    var_pop1="csp",
-    modalite_pop1="Cadres",
-    var_pop2="csp",
-    modalite_pop2="Employés"
-)
-
-result3 = EG_profil(
-    sortie="chemin/vers/le/dossier/Sorties/Profil zone geo",
-    table=table_enrichie,
-    var_age="age",
-    var_sexe="sexe",
-    code_geo="e_dept",
-    zone_geo="75"
-)
-
-# Affichage des résultats
-print("Profil cible vs population totale:", result1)
-print("Comparaison de 2 populations:", result2)
-print("Comparaison avec la population globale d’une zone géographique:", result3)
+# Exemple d'utilisation
+if __name__ == "__main__":
+    # Chargement de la table initiale
+    table_initiale = pd.DataFrame({
+        "codgeo": ["75001", "75002", "75003"],
+        "sexe": ["M", "F", "M"],
+        "age": [30, 25, 40]
+    })
+    
+    chemin_sortie = "chemin/vers/le/dossier/Sorties"
+    
+    # Appel de la fonction principale
+    table_enrichie_finale = enrichissement_geographique(table_initiale, chemin_sortie)
