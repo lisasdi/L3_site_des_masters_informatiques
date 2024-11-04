@@ -1,17 +1,4 @@
-# INEnrichissement/geocodage.py
+Bonjour,
+Je vous joins à ce mail l’attestation de ma mutuelle et le document signé. Je tiens à vous informer que j’ai déménagé récemment et sur l’attestation de ma mutuelle n’est pas encore mise à jour et sa date de fin est prévu pour le 28/02/2025.
 
-def EG_Insee_Iris(table_entree, top_TNP, civilite=None, prenom=None, nom=None, complement_nom=None, 
-                  adresse=None, complement_adrs=None, lieu_dit=None, cp=None, ville=None, 
-                  id_client=None, pays=None, email=None, tel=None):
-    # Code pour géocodage ici
-    pass
-
-# INEnrichissement/__init__.py
-
-from .geocodage import EG_Insee_Iris
-from .enrichissement_age import EG_age_sexe
-from .enrichissement_geomk import EG_Enrichissement_Geomk
-from .profil import EG_profil
-pandas>=1.0
-geopy
-numpy
+Bien cordialement,
