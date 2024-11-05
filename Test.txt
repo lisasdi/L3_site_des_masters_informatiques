@@ -1,7 +1,15 @@
-Bonjour,
+5- Quand l'entrée d'un système LIT donné est x(n) = 5u(n) la sortie est égale à:
 
-Je vous écris concernant les formations auxquelles j’aimerais participer. J’ai consulté le catalogue et remarqué plusieurs formations intéressantes. Pour ma part, je souhaiterais prioriser les suivantes :
+y(n)= boxed 2 * 2 * binomial(1,2) ^ n +3|-4j&|k(n)
 
-Power BI Niveau 1 : Préparez et présentez vos données avec Power BI Desktop [CV]
-DATA IA - Data Scientist Responsable
-Bien cordialement,
+a) donner la fonction de transfert du système H(z) et indiquer le diagramme des pôles et des zéros et définissez la ROC
+
+b) Donner la réponse impulsionnelle du système
+
+c) Donner l'équation de différence
+
+6- Pour un système LIT, on a * ((1 + 0.2z ^ - 1)(1 - 9z ^ - 2))/(1 + 0.81z ^ - 2)
+
+a) Le système, est-il stable ?
+
+b) Trouver une expression pour un système H_{1}(z) à phase minimale et un système passe tout pour que H(z)=H 1 (z)H ap (z)
